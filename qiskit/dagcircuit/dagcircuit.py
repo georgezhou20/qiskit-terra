@@ -32,7 +32,6 @@ import retworkx as rx
 from qiskit.circuit.quantumregister import QuantumRegister, Qubit
 from qiskit.circuit.classicalregister import ClassicalRegister, Clbit
 from qiskit.circuit.gate import Gate
-from qiskit.circuit.exceptions import CircuitError
 from qiskit.circuit.parameterexpression import ParameterExpression
 from qiskit.dagcircuit.exceptions import DAGCircuitError
 from qiskit.dagcircuit.dagnode import DAGNode
@@ -294,6 +293,7 @@ class DAGCircuit:
 
         Args:
             wire (Bit): the wire to be added
+
             This adds a pair of in and out nodes connected by an edge.
 
         Raises:
@@ -302,13 +302,8 @@ class DAGCircuit:
         if wire not in self._wires:
             self._wires.add(wire)
 
-            try:
-                wire_name = "%s[%s]" % (wire.register.name, wire.index)
-            except CircuitError:
-                wire_name = "%s" % wire
-
-            inp_node = DAGNode(type='in', name=wire_name, wire=wire)
-            outp_node = DAGNode(type='out', name=wire_name, wire=wire)
+            inp_node = DAGNode(type='in', wire=wire)
+            outp_node = DAGNode(type='out', wire=wire)
             input_map_id, output_map_id = self._multi_graph.add_nodes_from(
                 [inp_node, outp_node])
             inp_node._node_id = input_map_id
@@ -317,8 +312,7 @@ class DAGCircuit:
             self.output_map[wire] = outp_node
             self._multi_graph.add_edge(inp_node._node_id,
                                        outp_node._node_id,
-                                       {'name': wire_name,
-                                        'wire': wire})
+                                       {'wire': wire})
         else:
             raise DAGCircuitError("duplicate wire %s" % (wire,))
 
@@ -1054,8 +1048,7 @@ class DAGCircuit:
             for q in itertools.chain(*al):
                 self._multi_graph.add_edge(full_pred_map[q],
                                            node_index,
-                                           dict(name="%s[%s]" % (q.register.name, q.index),
-                                                wire=q))
+                                           dict(wire=q))
                 full_pred_map[q] = node_index
 
         # Connect all predecessors and successors, and remove
@@ -1063,8 +1056,7 @@ class DAGCircuit:
         for w in full_pred_map:
             self._multi_graph.add_edge(full_pred_map[w],
                                        full_succ_map[w],
-                                       dict(name="%s[%s]" % (w.register.name, w.index),
-                                            wire=w))
+                                       dict(wire=w))
             o_pred = self._multi_graph.predecessors(self.output_map[w]._node_id)
             if len(o_pred) > 1:
                 if len(o_pred) != 2:
