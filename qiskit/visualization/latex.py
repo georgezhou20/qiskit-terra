@@ -62,13 +62,13 @@ class QCircuitImage:
         # image scaling
         self.scale = 0.7 if scale is None else scale
 
-        # Map of qregs to sizes
-        self.qregs = {}
+        # Map of qubits to sizes
+        self.qubits = {}
 
-        # Map of cregs to sizes
-        self.cregs = {}
+        # Map of clbits to sizes
+        self.clbits = {}
 
-        # List of qregs and cregs in order of appearance in code and image
+        # List of qubits and clbits in order of appearance in code and image
         self.ordered_regs = []
 
         # Map from registers to the list they appear in the image
@@ -103,20 +103,20 @@ class QCircuitImage:
         self.plot_barriers = plot_barriers
 
         #################################
-        self.qregs = _get_register_specs(qubits)
+        self.qubits = _get_register_specs(qubits)
         self.qubit_list = qubits
         self.ordered_regs = qubits + clbits
-        self.cregs = _get_register_specs(clbits)
+        self.clbits = _get_register_specs(clbits)
         self.clbit_list = clbits
         self.img_regs = {bit: ind for ind, bit in
                          enumerate(self.ordered_regs)}
         if cregbundle:
-            self.img_width = len(qubits) + len(self.cregs)
+            self.img_width = len(qubits) + len(self.clbits)
         else:
             self.img_width = len(self.img_regs)
         self.wire_type = {}
         for bit in self.ordered_regs:
-            self.wire_type[bit] = bit.register in self.cregs.keys()
+            self.wire_type[bit] = bit.register in self.clbits.keys()
         self.cregbundle = cregbundle
         self.global_phase = global_phase
 
@@ -208,7 +208,7 @@ class QCircuitImage:
                 if self.cregbundle:
                     self._latex[i][0] = \
                         "\\lstick{" + self.ordered_regs[i + offset].register.name + ":"
-                    clbitsize = self.cregs[self.ordered_regs[i + offset].register]
+                    clbitsize = self.clbits[self.ordered_regs[i + offset].register]
                     self._latex[i][1] = "{/_{_{" + str(clbitsize) + "}}} \\cw"
                     offset += clbitsize - 1
                 else:
@@ -377,7 +377,7 @@ class QCircuitImage:
                     if_reg = cl_reg.register
                     pos_2 = self.img_regs[cl_reg]
                     if_value = format(op.condition[1],
-                                      'b').zfill(self.cregs[if_reg])[::-1]
+                                      'b').zfill(self.clbits[if_reg])[::-1]
                 if isinstance(op.op, ControlledGate) and op.name not in [
                         'ccx', 'cx', 'cz', 'cu1', 'cu3', 'crz',
                         'cswap']:
@@ -401,7 +401,7 @@ class QCircuitImage:
                         temp.sort(key=int)
                         bottom = temp[len(pos_array) - 1]
                         gap = pos_cond - bottom
-                        creg_rng = 1 if self.cregbundle else self.cregs[if_reg]
+                        creg_rng = 1 if self.cregbundle else self.clbits[if_reg]
                         for i in range(creg_rng):
                             if (if_value[i] == '1' or (self.cregbundle and int(if_value) > 0)):
                                 self._latex[pos_cond + i][column] = \
@@ -529,7 +529,7 @@ class QCircuitImage:
                                 self._latex[pos_1][column] = ("\\gate{%s}" % nm)
 
                             gap = pos_2 - pos_1
-                            creg_rng = 1 if self.cregbundle else self.cregs[if_reg]
+                            creg_rng = 1 if self.cregbundle else self.clbits[if_reg]
                             for i in range(creg_rng):
                                 if (if_value[i] == '1' or (self.cregbundle and int(if_value) > 0)):
                                     self._latex[pos_2 + i][column] = \
@@ -602,7 +602,7 @@ class QCircuitImage:
                             bottom = temp[1]
 
                             gap = pos_3 - bottom
-                            creg_rng = 1 if self.cregbundle else self.cregs[if_reg]
+                            creg_rng = 1 if self.cregbundle else self.clbits[if_reg]
                             for i in range(creg_rng):
                                 if (if_value[i] == '1' or (self.cregbundle and int(if_value) > 0)):
                                     self._latex[pos_3 + i][column] = \
@@ -811,7 +811,7 @@ class QCircuitImage:
                             bottom = temp[2]
 
                             gap = pos_4 - bottom
-                            creg_rng = 1 if self.cregbundle else self.cregs[if_reg]
+                            creg_rng = 1 if self.cregbundle else self.clbits[if_reg]
                             for i in range(creg_rng):
                                 if (if_value[i] == '1' or (self.cregbundle and int(if_value) > 0)):
                                     self._latex[pos_4 + i][column] = \
@@ -917,7 +917,7 @@ class QCircuitImage:
                     if self.cregbundle:
                         pos_2 = self.img_regs[self.clbit_list[0]]
                         cregindex = self.img_regs[op.cargs[0]] - pos_2
-                        for creg_size in self.cregs.values():
+                        for creg_size in self.clbits.values():
                             if cregindex >= creg_size:
                                 cregindex -= creg_size
                                 pos_2 += 1
