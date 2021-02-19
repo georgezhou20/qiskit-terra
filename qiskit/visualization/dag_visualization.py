@@ -155,6 +155,7 @@ def dag_drawer(dag, scale=0.7, filename=None, style='color'):
 
     dot_str = dag._multi_graph.to_dot(node_attr_func, edge_attr_func,
                                       graph_attrs)
+    print(dot_str)
     dot = pydot.graph_from_dot_data(dot_str)[0]
 
     if filename:
