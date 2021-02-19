@@ -2526,6 +2526,22 @@ class QuantumCircuit:
         from qiskit.circuit.library.generalized_gates.pauli import PauliGate
         return self.append(PauliGate(pauli_string), qubits, [])
 
+    def while_loop(self, condition_kernel, block, qubits, clbits):
+        from qiskit.circuit.controlflow.while_loop import WhileLoopOp
+        return self.append(WhileLoopOp(len(qubits), len(clbits), condition_kernel, block), qubits, clbits)
+
+    def for_loop(self, start, stop, inc, loop_param, block, qubits, clbits):
+        from qiskit.circuit.controlflow.for_loop import ForLoopOp
+        return self.append(ForLoopOp(len(qubits), len(clbits), loop_param, start, stop, inc, block), qubits, clbits)
+
+    def if_else(self, predicate, consequent, alternative, qubits, clbits):
+        from qiskit.circuit.controlflow.if_else import IfElseOp
+        return self.append(IfElseOp(len(qubits), len(clbits), predicate, consequent, alternative), qubits, clbits)
+
+    def case(self, predicate_fn_list, qubits, clbits):
+        from qiskit.circuit.controlflow.case import CaseOp
+        return self.append(CaseOp(len(qubits), len(clbits), pred_fn_list), qubits, clbits)
+
     def add_calibration(self, gate, qubits, schedule, params=None):
         """Register a low-level, custom pulse definition for the given gate.
 
