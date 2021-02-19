@@ -86,10 +86,15 @@ class BasisTranslator(TransformationPass):
 
         target_basis = set(self._target_basis).union(basic_instrs)
 
-        source_basis = set()
-        for node in dag.op_nodes():
-            if not dag.has_calibration_for(node):
-                source_basis.add((node.name, node.op.num_qubits))
+        def _find_source_basis(adag):
+            our_basis = set((node.name, node.op.num_qubits)
+                           for node in dag.op_nodes()
+                           if not dag.has_calibration_for(node))
+
+            if not adag._subcircuits:
+                return our_basis
+            else:
+                return our_basis.union(*[_find_source_basis(sc) for sc in adag._subcircuits])
 
         logger.info('Begin BasisTranslator from source basis %s to target '
                     'basis %s.', source_basis, target_basis)
@@ -121,48 +126,56 @@ class BasisTranslator(TransformationPass):
         # Replace source instructions with target translations.
 
         replace_start_time = time.time()
-        for node in dag.op_nodes():
-            if node.name in target_basis:
-                continue
 
-            if dag.has_calibration_for(node):
-                continue
+        def _replace_op_nodes(dag, target_basis, instr_map):
+            for node in dag.op_nodes():
+                if node.name in target_basis:
+                    continue
 
-            if (node.op.name, node.op.num_qubits) in instr_map:
-                target_params, target_dag = instr_map[node.op.name, node.op.num_qubits]
+                if isinstance(node.op, ControlFlowOp):
+                    # recur the substitution routine on subcircuits/blocks here
+                    node.op._blocks = [dag_to_circuit(_replace_op_nodes(circuit_to_dag(block), target_basis, instr_map))
+                                       for block in node.op_blocks]
 
-                if len(node.op.params) != len(target_params):
-                    raise TranspilerError(
-                        'Translation num_params not equal to op num_params.'
-                        'Op: {} {} Translation: {}\n{}'.format(
-                            node.op.params, node.op.name,
-                            target_params, target_dag))
+                # KDK this will need to be only on the outermost loop
+                if dag.has_calibration_for(node):
+                    continue
 
-                if node.op.params:
-                    # Convert target to circ and back to assign_parameters, since
-                    # DAGCircuits won't have a ParameterTable.
-                    from qiskit.converters import dag_to_circuit, circuit_to_dag
-                    target_circuit = dag_to_circuit(target_dag)
+                if (node.op.name, node.op.num_qubits) in instr_map:
+                    target_params, target_dag = instr_map[node.op.name, node.op.num_qubits]
 
-                    target_circuit.assign_parameters(
-                        dict(zip_longest(target_params, node.op.params)),
-                        inplace=True)
+                    if len(node.op.params) != len(target_params):
+                        raise TranspilerError(
+                            'Translation num_params not equal to op num_params.'
+                            'Op: {} {} Translation: {}\n{}'.format(
+                                node.op.params, node.op.name,
+                                target_params, target_dag))
 
-                    bound_target_dag = circuit_to_dag(target_circuit)
+                    if node.op.params:
+                        # Convert target to circ and back to assign_parameters, since
+                        # DAGCircuits won't have a ParameterTable.
+                        from qiskit.converters import dag_to_circuit, circuit_to_dag
+                        target_circuit = dag_to_circuit(target_dag)
+
+                        target_circuit.assign_parameters(
+                            dict(zip_longest(target_params, node.op.params)),
+                            inplace=True)
+
+                        bound_target_dag = circuit_to_dag(target_circuit)
+                    else:
+                        bound_target_dag = target_dag
+
+                    if (len(bound_target_dag.op_nodes()) == 1
+                            and len(bound_target_dag.op_nodes()[0].qargs) == len(node.qargs)):
+                        dag_op = bound_target_dag.op_nodes()[0].op
+                        dag.substitute_node(node, dag_op, inplace=True)
+
+                        if bound_target_dag.global_phase:
+                            dag.global_phase += bound_target_dag.global_phase
+                    else:
+                        dag.substitute_node_with_dag(node, bound_target_dag)
                 else:
-                    bound_target_dag = target_dag
-
-                if (len(bound_target_dag.op_nodes()) == 1
-                        and len(bound_target_dag.op_nodes()[0].qargs) == len(node.qargs)):
-                    dag_op = bound_target_dag.op_nodes()[0].op
-                    dag.substitute_node(node, dag_op, inplace=True)
-
-                    if bound_target_dag.global_phase:
-                        dag.global_phase += bound_target_dag.global_phase
-                else:
-                    dag.substitute_node_with_dag(node, bound_target_dag)
-            else:
-                raise TranspilerError('BasisTranslator did not map {}.'.format(node.name))
+                    raise TranspilerError('BasisTranslator did not map {}.'.format(node.name))
 
         replace_end_time = time.time()
         logger.info('Basis translation instructions replaced in %.3fs.',

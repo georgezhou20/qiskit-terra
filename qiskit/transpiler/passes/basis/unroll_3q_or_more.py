@@ -15,6 +15,7 @@
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.exceptions import QiskitError
 from qiskit.converters.circuit_to_dag import circuit_to_dag
+from qiskit.circuit.controlflow import ControlFlowOp
 
 
 class Unroll3qOrMore(TransformationPass):
@@ -31,6 +32,11 @@ class Unroll3qOrMore(TransformationPass):
             QiskitError: if a 3q+ gate is not decomposable
         """
         for node in dag.multi_qubit_ops():
+            # KDK Punt control flow ops to routing passes, which will need to separately route each branch (incl restore layout)
+            # KDK This pass also can maybe be removed from preset managers in favor of running basis translator once
+            if isinstance(node.op, ControlFlowOp):
+                continue
+
             # TODO: allow choosing other possible decompositions
             rule = node.op.definition.data
             if not rule:

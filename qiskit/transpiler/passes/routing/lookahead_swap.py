@@ -21,6 +21,7 @@ from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.exceptions import TranspilerError
 from qiskit.transpiler.layout import Layout
 from qiskit.dagcircuit import DAGNode
+from qiskit.circuit.controlflow import ControlFlowOp
 
 logger = logging.getLogger(__name__)
 
@@ -98,37 +99,74 @@ class LookaheadSwap(TransformationPass):
         current_layout = trivial_layout.copy()
 
         mapped_gates = []
-        ordered_virtual_gates = list(dag.serial_layers())
-        gates_remaining = ordered_virtual_gates.copy()
 
-        while gates_remaining:
-            logger.debug('Top-level routing step: %d gates remaining.',
-                         len(gates_remaining))
+        # Idea: route up until we are blocked by a control flow gate (a CFG would be useful here
+        # for pre-finding the routable sections). This could also be pushed up to the pass manager
+        # for a flow of route as much as possible, route and restore blocks (strictly, restoring
+        # can be avoided if both blocks have the same final layout, maybe an interesting question
+        # of how to route identically, or how to fine /some/ final layout that has the lowest
+        # permutation cost from the final layouts of each of the blocks.
 
-            best_step = _search_forward_n_swaps(current_layout,
-                                                gates_remaining,
-                                                self.coupling_map,
-                                                self.search_depth,
-                                                self.search_width)
+        for block in dag.topological_blocks():
+            if len(block) == 1 and isinstance(block[0].op, ControlFlowOp):
+                block_initial_layout = current_layout
+                routed_blocks = []
 
-            if best_step is None:
-                raise TranspilerError('Lookahead failed to find a swap which mapped '
-                                      'gates or improved layout score.')
+                for block in block[0].op._blocks:
+                    block_dag = dag._copy_circuit_metadata()
+                    block_dag.apply_operation_back(block[0].op.copy(), block[0].qargs,
+                                                   block[0].cargs, block[0].condition)
+                    routed_dag = PassManager([
+                        SetLayout(block_initial_layout),
+                        ApplyLayout(),
+                        LookaheadSwap(self.coupling_map, self.search_depth, self.search_width)
+                    ]).run(block_dag)  # KDK Not a circuit
 
-            logger.debug('Found best step: mapped %d gates. Added swaps: %s.',
-                         len(best_step['gates_mapped']), best_step['swaps_added'])
+                    restored_dag = PassManager([
+                        LayoutTransformation(from_layout=last_pm.final_layout,
+                                             to_layout=block_initial_layout)
+                    ]).run(routed_dag)
 
-            current_layout = best_step['layout']
-            gates_mapped = best_step['gates_mapped']
-            gates_remaining = best_step['gates_remaining']
+                    routed_blocks.append(restored_dag)
 
-            mapped_gates.extend(gates_mapped)
+                block[0].op._blocks = routed_blocks  # KDK Possible we need to expand the size here
+                # if we routed outside our qargs. Also, possibly need copy for lack of ownership.
 
-        # Preserve input DAG's name, regs, wire_map, etc. but replace the graph.
-        mapped_dag = dag._copy_circuit_metadata()
+                mapped_gates.append(block[0])
 
-        for node in mapped_gates:
-            mapped_dag.apply_operation_back(op=node.op, qargs=node.qargs, cargs=node.cargs)
+            else:
+                # Route as normal (but can only look up until next ControlFlowOp)
+                ordered_virtual_gates = block
+                gates_remaining = ordered_virtual_gates.copy()
+
+                while gates_remaining:
+                    logger.debug('Top-level routing step: %d gates remaining.',
+                                 len(gates_remaining))
+
+                    best_step = _search_forward_n_swaps(current_layout,
+                                                        gates_remaining,
+                                                        self.coupling_map,
+                                                        self.search_depth,
+                                                        self.search_width)
+
+                    if best_step is None:
+                        raise TranspilerError('Lookahead failed to find a swap which mapped '
+                                              'gates or improved layout score.')
+
+                    logger.debug('Found best step: mapped %d gates. Added swaps: %s.',
+                                 len(best_step['gates_mapped']), best_step['swaps_added'])
+
+                    current_layout = best_step['layout']
+                    gates_mapped = best_step['gates_mapped']
+                    gates_remaining = best_step['gates_remaining']
+
+                    mapped_gates.extend(gates_mapped)
+
+                # Preserve input DAG's name, regs, wire_map, etc. but replace the graph.
+                mapped_dag = dag._copy_circuit_metadata()
+
+            for node in mapped_gates:
+                mapped_dag.apply_operation_back(op=node.op, qargs=node.qargs, cargs=node.cargs)
 
         return mapped_dag
 

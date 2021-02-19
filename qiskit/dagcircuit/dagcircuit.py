@@ -960,6 +960,29 @@ class DAGCircuit:
         """
         return (nd for nd in self.topological_nodes() if nd.type == 'op')
 
+    def topological_blocks(self):
+        """
+        Collect blocks of circuit in topological order. Block can be either
+        a) a basic block: list of gates and c instructions w/out control flow
+        b) a control flow block: len-1 list with a ControlFlowOp as elem 0
+        """
+
+        def _key(x):
+            """Defer choosing ControlFlowOps to greedily maximize block size."""
+            prefix = 'c' if isinstance(x.op, ControlFlowOp) else 'a'
+            return prefix + x.sort_key
+
+        current_block = []
+        for node in rx.lexicographical_topological_sort(
+                self._multi_graph, key=_key):
+            if isinstance(node.op, ControlFlowOp):
+                if current_block:
+                    yield current_block
+                    current_block = []
+                yield [node]
+            else:
+                current_block.append(node)
+
     def substitute_node_with_dag(self, node, input_dag, wires=None):
         """Replace one node with dag.
 
