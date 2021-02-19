@@ -77,6 +77,8 @@ class DAGDependency:
         # represent non-commutativity between two gates.
         self._multi_graph = rx.PyDAG()
 
+        # self._subcircuits = []
+
         # Map of qreg/creg name to Register object.
         self.qregs = OrderedDict()
         self.cregs = OrderedDict()

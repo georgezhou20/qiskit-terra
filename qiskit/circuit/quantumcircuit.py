@@ -42,6 +42,7 @@ from .register import Register
 from .bit import Bit
 from .quantumcircuitdata import QuantumCircuitData
 from .delay import Delay
+from qiskit.circuit.controlflow import ControlFlowOp
 
 try:
     import pygments
@@ -203,6 +204,18 @@ class QuantumCircuit:
         if not isinstance(metadata, dict) and metadata is not None:
             raise TypeError("Only a dictionary or None is accepted for circuit metadata")
         self._metadata = metadata
+
+        # A list of the direct python instances (not copies) owned and used by this circuit
+        # as blocks in control flow operations.
+        self._subcircuits = []
+
+    @property
+    def is_dynamic(self):
+        return bool(self._subcircuits)
+
+    @property
+    def is_basic_block(self):
+        return not self.is_dynamic
 
     @property
     def data(self):
@@ -984,6 +997,9 @@ class QuantumCircuit:
         instruction_context = instruction, qargs, cargs
         self._data.append(instruction_context)
 
+        if isinstance(instruction, ControlFlowOp):
+            self._subcircuits.extend(instruction._blocks)
+
         self._update_parameter_table(instruction)
 
         # mark as normal circuit if a new instruction is added
@@ -1691,6 +1707,11 @@ class QuantumCircuit:
                     for instr, param_index in self._parameter_table[param]]
             for param in self._parameter_table
         })
+
+        # KDK Would like to remove duplciates here, but qc's are not hashable
+        cpy._subcircuits = list(block for instr in instr_copies.values()
+                                if isinstance(instr, ControlFlowOp)
+                                for block in instr._blocks)
 
         cpy._data = [(instr_copies[id(inst)], qargs.copy(), cargs.copy())
                      for inst, qargs, cargs in self._data]

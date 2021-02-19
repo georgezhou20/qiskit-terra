@@ -35,6 +35,7 @@ from qiskit.circuit.gate import Gate
 from qiskit.circuit.parameterexpression import ParameterExpression
 from qiskit.dagcircuit.exceptions import DAGCircuitError
 from qiskit.dagcircuit.dagnode import DAGNode
+from qiskit.circuit.controlflow import ControlFlowOp
 
 
 class DAGCircuit:
@@ -89,6 +90,8 @@ class DAGCircuit:
 
         self.duration = None
         self.unit = 'dt'
+
+        self._subcircuits = []
 
     def to_networkx(self):
         """Returns a copy of the DAGCircuit in networkx format."""
@@ -427,6 +430,9 @@ class DAGCircuit:
 
         node_index = self._add_op_node(op, qargs, cargs)
 
+        if isinstance(op, ControlFlowOp):
+            self._subcircuits.extend(op._blocks)
+        
         # Add new in-edges from predecessors of the output nodes to the
         # operation node while deleting the old in-edges of the output nodes
         # and adding new edges from the operation node to each output node
@@ -463,6 +469,9 @@ class DAGCircuit:
         self._check_bits(qargs, self.input_map)
         self._check_bits(all_cbits, self.input_map)
         node_index = self._add_op_node(op, qargs, cargs)
+
+        if isinstance(op, ControlFlowOp):
+            self._subcircuits.extend(op._blocks)
 
         # Add new out-edges to successors of the input nodes from the
         # operation node while deleting the old out-edges of the input nodes
@@ -1044,6 +1053,9 @@ class DAGCircuit:
             m_cargs = list(map(lambda x: wire_map.get(x, x),
                                sorted_node.cargs))
             node_index = self._add_op_node(sorted_node.op, m_qargs, m_cargs)
+
+            if isinstance(sorted_node.op, ControlFlowOp):
+                self._subcircuits.extend(sorted_node.op._blocks)
 
             # Add edges from predecessor nodes to new node
             # and update predecessor nodes that change
