@@ -983,6 +983,61 @@ class DAGCircuit:
             else:
                 current_block.append(node)
 
+    def to_cfg(self):
+        cfg = rx.PyDiGraph()
+
+        head = {wire: None for wire in self._wires}
+        entry_nodes = {wire: None for wire in self._wires}
+
+        for block in self.topological_blocks():
+            if len(block) == 1 and isinstance(block.op, ControlFlowOp):
+                block_cfgs = [block.to_cfg() for block in block.op._blocks]
+                cf_enter = cfg.add_node(block)
+
+                for wire in block.qargs + block.cargs:
+                    if head[wire] is None:
+                        entry_nodes[wire] = block
+                    elif not cfg.has_edge(head[wire], cf_enter):
+                        cfg.add_edge(head, cf_enter)
+
+                    head[wire] = cf_exit
+
+                cf_exit = cfg.add_node(block)
+
+                for block_cfg in block_cfgs:
+                    block_entry_node = cfg.add_block(block_cfg)
+                    block_exit_node = cfg.add_block(block_cfg)
+
+                    # KDK Would want to expand these and add directly to graph
+                    # (with edges from condition node to entry points of block_cfg
+                    # Can do this with rx.compose, but need to track (or search for)
+                    # entry and exit nodes
+                    nn_id = cfg.compose(block_cfg[0])
+
+                    for entry_node in block_cfg[1]:
+                        cfg.add_edge(block_entry_node, nn_id[entry_node])
+                    for exit_node in block_cfg[2]:
+                        cfg.add_edge(nn_id[exit_node], block_exit_node)
+
+                if isinstance(block.op, [ForLoopOp, WhileLoopOp]):
+                    cfg.add_edge(block_exit_node, block_entry_node)
+
+                for block in block_nodes:
+                    cfg.add_edge(cf_enter, block)
+                    cfg.add_edge(block, cf_exit)
+            else:
+                cf_block = cfg.add_node(block)
+                for wire in block.qargs + block.cargs:
+                    if head[wire] is None:
+                        entry_nodes[wire] = block
+                    elif not cfg.has_edge(head[wire], cf_block):
+                        cfg.add_edge(head[wire], cf_block)
+
+                    head[wire] = cf_block
+
+        exit_nodes = head
+        return cfg, entry_nodes, exit_nodes
+
     def substitute_node_with_dag(self, node, input_dag, wires=None):
         """Replace one node with dag.
 
