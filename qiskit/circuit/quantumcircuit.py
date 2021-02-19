@@ -1487,6 +1487,9 @@ class QuantumCircuit:
             The circuit depth and the DAG depth need not be the
             same.
         """
+        if self.is_dynamic:
+            raise CircuitError
+
         # Assign each bit in the circuit a unique integer
         # to index into op_stack.
         bit_indices = {bit: idx
