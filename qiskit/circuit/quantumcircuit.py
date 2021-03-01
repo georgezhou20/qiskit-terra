@@ -2545,6 +2545,14 @@ class QuantumCircuit:
         from qiskit.circuit.controlflow.case import CaseOp
         return self.append(CaseOp(len(qubits), len(clbits), pred_fn_list), qubits, clbits)
 
+    def break_loop(self):
+        from qiskit.circuit.controlflow.break_ import BreakOp
+        return self.append(BreakOp(self.num_qubits, self.num_clbits), self.qubits, self.clbits)
+
+    def continue_loop(self):
+        from qiskit.circuit.controlflow.continue_ import ContinueOp
+        return self.append(ContinueOp(self.num_qubits, self.num_clbits), self.qubits, self.clbits)
+
     def add_calibration(self, gate, qubits, schedule, params=None):
         """Register a low-level, custom pulse definition for the given gate.
 

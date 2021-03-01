@@ -231,4 +231,4 @@ from .classicalfunction.types import Int1, Int2
 from .classicalfunction import classical_function
 
 from .kernelfunction import KernelFunctionOp
-from .controlflow import ControlFlowOp, WhileLoopOp, ForLoopOp, IfElseOp, CaseOp
+from .controlflow import ControlFlowOp, WhileLoopOp, ForLoopOp, IfElseOp, CaseOp, BreakOp, ContinueOp
