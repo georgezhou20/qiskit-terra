@@ -2537,6 +2537,10 @@ class QuantumCircuit:
         from qiskit.circuit.controlflow.for_loop import ForLoopOp
         return self.append(ForLoopOp(len(qubits), len(clbits), loop_param, start, stop, inc, block), qubits, clbits)
 
+    def if_(self, predicate, consequent, qubits, clbits):
+        from qiskit.circuit.controlflow.if_else import IfElseOp
+        return self.append(IfElseOp(len(qubits), len(clbits), predicate, consequent, None), qubits, clbits)
+
     def if_else(self, predicate, consequent, alternative, qubits, clbits):
         from qiskit.circuit.controlflow.if_else import IfElseOp
         return self.append(IfElseOp(len(qubits), len(clbits), predicate, consequent, alternative), qubits, clbits)
