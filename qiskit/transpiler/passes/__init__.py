@@ -193,3 +193,4 @@ from .utils import FixedPoint
 from .utils import Error
 
 from .control_flow import UnrollLoops
+from .control_flow import ExpandControlFlow
