@@ -2529,9 +2529,9 @@ class QuantumCircuit:
         from qiskit.circuit.library.generalized_gates.pauli import PauliGate
         return self.append(PauliGate(pauli_string), qubits, [])
 
-    def while_loop(self, condition_kernel, block, qubits, clbits):
+    def while_loop(self, condition, block, qubits, clbits):
         from qiskit.circuit.controlflow.while_loop import WhileLoopOp
-        return self.append(WhileLoopOp(len(qubits), len(clbits), condition_kernel, block), qubits, clbits)
+        return self.append(WhileLoopOp(len(qubits), len(clbits), condition, block), qubits, clbits)
 
     def for_loop(self, start, stop, inc, loop_param, block, qubits, clbits):
         from qiskit.circuit.controlflow.for_loop import ForLoopOp
