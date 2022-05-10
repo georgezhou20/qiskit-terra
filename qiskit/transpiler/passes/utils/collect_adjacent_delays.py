@@ -132,8 +132,10 @@ class CombineAdjacentDelays(TransformationPass):
             ('len(multi_q_delays): ', len([delay for delay in closed_delays if delay[0].num_qubits > 1])),
         ))) #Expect ~30 for example qv 256
 
-        # Rebuild dag from topological sort w/ delays deferred as much as possible
-        # From there will need to manually pop delays 
+        # Try something simpler:
+        # 1) Split each doomed delay in to N 1-q delays of new duration
+        # 2) Combine blocks of new multi-qubit delays
+
         # create lookup from delay to replacements sorted by start time
 
         replacement_ops = defaultdict(list)  # existing_delay_node, [sorted_list_of_replacement_delays]
@@ -143,94 +145,30 @@ class CombineAdjacentDelays(TransformationPass):
             for replacing_delay_node in replacing_delay_nodes:
                 replacement_ops[replacing_delay_node].append(closed_delay)
 
-        out_dag = dag.copy_empty_like()
+        delay_op_placeholders = defaultdict(list)
 
-        open_delay_nodes = []
-        # bug? topological_op_node key has to handle io nodes, also appears not to work if i concatinate e.g. 'a' + _sort_key
-        #display(dag.draw())
-        def _key(node):
-            return ('a' if isinstance(node, DAGOpNode) and node.op.name == 'delay' else 'b')
+        for doomed_delay_node, replacements in replacement_ops.items():
+            oneq_delay = QuantumCircuit(1)
+            for (delay_op, _, __, ___) in replacements:
+                oneq_delay.delay(delay_op.duration, 0)
 
-        # Walk through existing dag, grabbing delays as early as possible
-        water_mark = 0
-        added_delay_ids = set()  # Hacks all the way down. We're adding delays repeatidly for some QV circuits, so step around for now.
+            oneq_dag = circuit_to_dag(oneq_delay)
+            oneq_delay_node_ids = [ node._node_id for node in oneq_dag.topological_op_nodes()]
 
-        for node in dag.topological_op_nodes(key=_key):
-            logger.info(pformat((
-                '---dag_walk---',
-                (node.op.name, [bit_idx_locs[qarg] for qarg in node.qargs]),
-                ('len(open_delay_nodes)', len(open_delay_nodes)),
-                ('_key(node)', _key(node)),
-                ('water_mark', water_mark),
-            )))
+            out_node_map = dag.substitute_node_with_dag(doomed_delay_node, oneq_dag)
+            out_oneq_delay_nodes = [out_node_map[node_id] for node_id in oneq_delay_node_ids]
 
-            # If it's a joinable delay, add it to open_delay_nodes
-            # If its not a delay, and there are no open delay nodes, add it
-            # If its not a delay, and there are open delay nodes, add any preceding delays (by qargs) and any delays which would precede them...
-            # At the end, wrap up any final delays still in open_delay_nodes
+            for (delay_op, _, __, ___), out_oneq_delay_node in zip(replacements, out_oneq_delay_nodes):
+                delay_op_placeholders[id(delay_op)].append(out_oneq_delay_node)
 
-            if node in joinable_delay_nodes:
-                open_delay_nodes.append(node)
-            else:
-                if not open_delay_nodes:
-                    out_dag.apply_operation_back(node.op, node.qargs, node.cargs)
-                else:
-                    # If we come across a node that's not a delay, we need to resolve all the delays
-                    # Tracking all the way back through open_delays
+        for (delay_op, start_time, end_time, replacing_delay_nodes) in closed_delays:
+            doomed_placeholder_nodes = delay_op_placeholders[id(delay_op)]
+            dag.replace_block_with_op(
+                doomed_placeholder_nodes,
+                delay_op,
+                {node.qargs[0]: idx for idx, node in enumerate(doomed_placeholder_nodes)},
+                cycle_check=True)
 
-                    replacements_for_open_delays = sorted(
-                        (replacement_delay
-                         for open_delay_node in open_delay_nodes
-                         for replacement_delay in replacement_ops[open_delay_node]
-                        ),
-                        key=lambda c: (c[1], c[2])
-                    )
 
-                    # replacements_for_open_delays will have duplicates for multi-q delays
-                    # e.g. if we had a 3q vchain, we'll open two delays, the first will have three replacements,
-                    # the second will have one, but it will be the same as the middle of the above
-                    # hack a quick filter now
 
-                    seen_replacement_ids = set()
-                    unique_replacements_for_open_delays = []
-                    for replacement in replacements_for_open_delays:
-                        if id(replacement) not in seen_replacement_ids:
-                            unique_replacements_for_open_delays.append(replacement)
-                            seen_replacement_ids.add(id(replacement))
-                    replacements_for_open_delays = unique_replacements_for_open_delays
-
-                    # pprint(replacements_for_open_delays)
-
-                    if replacements_for_open_delays:
-                        for replacement in replacements_for_open_delays:
-                            # Should really track dependencies backwards to find out which delays to add
-                            # Maybe we can cheat it since we already have a scheduled circuit
-                            if water_mark < replacement[2] <= self.property_set['node_start_time'][node]:
-                                if id(replacement[0]) not in added_delay_ids:
-                                    added_delay_ids.add(id(replacement[0]))
-                                    out_dag.apply_operation_back(replacement[0],
-                                                                 [qarg for nnode in replacement[3] for qarg in nnode.qargs],
-                                                                 []
-                                                                 )
-                        water_mark = self.property_set['node_start_time'][node]
-                    else:
-                        # If this is a delay that doesn't have a replacement
-                        # This is hacky, it seems like we could pick up final delays here
-                        for open_delay in open_delay_nodes:
-                            if id(open_delay.op) not in added_delay_ids:
-                                added_delay_ids.add(id(open_delay.op))
-                                out_dag.apply_operation_back(open_delay.op, open_delay.qargs, open_delay.cargs)
-
-                    #open_delay_nodes = []
-                    if id(node.op) not in added_delay_ids:
-                        added_delay_ids.add(id(node.op))
-                        out_dag.apply_operation_back(node.op, node.qargs, node.cargs)
-
-        # Any remaining delays
-        for open_delay_node in open_delay_nodes:
-            if not replacement_ops[open_delay_node] and self.property_set['node_start_time'][open_delay_node] > 0:
-                if id(open_delay_node.op) not in added_delay_ids:
-                    added_delay_ids.add(id(open_delay_node.op))
-                    out_dag.apply_operation_back(open_delay_node.op, open_delay_node.qargs, open_delay_node.cargs)
-
-        return out_dag
+        return dag

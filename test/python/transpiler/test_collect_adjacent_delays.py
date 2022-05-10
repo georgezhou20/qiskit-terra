@@ -136,9 +136,45 @@ class TestCombineAdjacentDelays(QiskitTestCase):
 
         g_test_qc = schedule_alap(qvx2, backend)
 
+    def test_qv16(self):
+        # import logging
+        # logging.basicConfig(level=logging.INFO)
+
+        N = 8
+        backend = FakeMumbai()
+        line = [0, 1, 4, 7, 10, 12, 15, 18, 21]
+        basis_gates = ['cx', 'sx', 'rz']
+
+        qv = QuantumVolume(N, seed=0).decompose()
+        cmap = CouplingMap.from_line(N)
+        instruction_durations = InstructionDurations.from_backend(backend)
+
+
+        qvx = transpile(qv,
+                        coupling_map=cmap,
+                        #basis_gates=['rz', 'sx', 'cx'],
+                        basis_gates=['unitary', 'swap'],
+                        routing_method='sabre',
+                        layout_method='sabre',
+                        seed_transpiler=4,
+                        optimization_level=0)
+
+        qvx2 = transpile(qvx,
+                         initial_layout=line[:N],
+                         basis_gates=basis_gates,
+                         instruction_durations=instruction_durations,
+                         scheduling_method='alap')
+
+        #qvx2.draw('mpl', idle_wires=False)
+        # timeline_drawer(qvx2, show_idle=False, show_delays=True)
+
+        g_test_qc = schedule_alap(qvx2, backend)
+
         # g_test_qc.draw('mpl', fold=-1, idle_wires=False)
         # timeline_drawer(g_test_qc, show_idle=False, show_delays=True)
 
         # import matplotlib.pyplot as plt
         # plt.show()
+
+
 
