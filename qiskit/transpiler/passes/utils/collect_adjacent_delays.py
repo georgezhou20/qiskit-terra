@@ -115,9 +115,8 @@ class CombineAdjacentDelays(TransformationPass):
             if edge_type == 'end':
                 # If crossing a end edge, close any open delay on this qubit (and re-open a delay on any qubits this delay had shared)
                 if len(adjacent_open_delays) != 1:
-                    # import pdb; pdb.set_trace()
-                    # raise Exception("closing edge w/o an open delay?")
-                    pass  # At some point, we get very confused
+                    import pdb; pdb.set_trace()
+                    raise Exception("closing edge w/o an open delay?")
                 else:
                     _close_delay(adjacent_open_delays[0], edge_time, edge_node)
 
@@ -137,11 +136,12 @@ class CombineAdjacentDelays(TransformationPass):
 
         # Rebuild dag from topological sort w/ delays deferred as much as possible
         # From there will need to manually pop delays 
-        #create lookup from delay to replacements sorted by start time
+        # create lookup from delay to replacements sorted by start time
 
         replacement_ops = defaultdict(list)  # existing_delay_node, [sorted_list_of_replacement_delays]
         for closed_delay in sorted(closed_delays, key=lambda k: (k[1], k[2])):  # Might already be in right order?
             (delay_op, start_time, end_time, replacing_delay_nodes) = closed_delay
+
             for replacing_delay_node in replacing_delay_nodes:
                 replacement_ops[replacing_delay_node].append(closed_delay)
 
@@ -158,14 +158,22 @@ class CombineAdjacentDelays(TransformationPass):
         added_delay_ids = set()  # Hacks all the way down. We're adding delays repeatidly for some QV circuits, so step around for now.
 
         for node in dag.topological_op_nodes(key=_key):
-            #print(node.op.name, [bit_idx_locs[qarg] for qarg in node.qargs], len(open_delay_nodes), _key(node), water_mark)
+            logger.info(pformat((
+                '---dag_walk---',
+                (node.op.name, [bit_idx_locs[qarg] for qarg in node.qargs]),
+                ('len(open_delay_nodes)', len(open_delay_nodes)),
+                ('_key(node)', _key(node)),
+                ('water_mark', water_mark),
+            )))
 
-            # If it's a delay, add it to open_delay_nodes
+            # If it's a joinable delay, add it to open_delay_nodes
             # If its not a delay, and there are no open delay nodes, add it
             # If its not a delay, and there are open delay nodes, add any preceding delays (by qargs) and any delays which would precede them...
             # At the end, wrap up any final delays still in open_delay_nodes
 
-            if node.op.name != 'delay':
+            if node in joinable_delay_nodes:
+                open_delay_nodes.append(node)
+            else:
                 if not open_delay_nodes:
                     out_dag.apply_operation_back(node.op, node.qargs, node.cargs)
                 else:
@@ -219,8 +227,6 @@ class CombineAdjacentDelays(TransformationPass):
                     if id(node.op) not in added_delay_ids:
                         added_delay_ids.add(id(node.op))
                         out_dag.apply_operation_back(node.op, node.qargs, node.cargs)
-            else:
-                open_delay_nodes.append(node)
 
         # Any remaining delays
         for open_delay_node in open_delay_nodes:
