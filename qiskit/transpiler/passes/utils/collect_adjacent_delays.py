@@ -87,30 +87,10 @@ class CombineAdjacentDelays(TransformationPass):
         def _combine_delays(old_delay_node, start_time, delays):
             # If we find a delay opening which is adjacent two two or more open delays.
 
-            # Split shared delays into those which carry on prior (to be closed and re-opened)
-            # and those already with the right start time
-            preceding_delays = [delay for delay in delays if delay[1] < start_time]
-            aligned_delays = [delay for delay in delays if delay[1] == start_time]
-            assert len(preceding_delays) + len(aligned_delays) == len(delays)
-
-            for delay in preceding_delays:
-                _close_delay(delay, start_time) 
-
-            if len(aligned_delays) == 0:
-                _open_delay(start_time, [old_delay_node] + [d_op for d in preceding_delays for d_op in d[2]])
-            if len(aligned_delays) == 1:
-                aligned_delays[0][0].num_qubits += 1
-                aligned_delays[2].append(old_delay_node)
-            if len(aligned_delays) > 1:
-                chosen_delay, *doomed_delays = aligned_delays
-
-                for doomed_delay in doomed_delays:
-                    chosen_delay[0].num_qubits += doomed_delay[0].num_qubits
-                    chosen_delay[2] += doomed_delay[2]
-                    _close_delay(doomed_delay, start_time)
-
-                chosen_delay[0].num_qubits += 1
-                chosen_delay[2].append(old_delay_node)
+            for delay in delays:
+                _close_delay(delay, start_time)
+            _open_delay(start_time,
+                        [old_delay_node] + [node for delay in delays for node in delay[2]])
 
         for edge_type, edge_time, edge_node in sorted_delay_edges:
             adjacent_open_delays = [open_delay for open_delay in open_delays
