@@ -26,3 +26,4 @@ from .error import Error
 from .remove_barriers import RemoveBarriers
 from .contains_instruction import ContainsInstruction
 from .gates_basis import GatesInBasis
+from .combine_adjacent_delays import CombineAdjacentDelays

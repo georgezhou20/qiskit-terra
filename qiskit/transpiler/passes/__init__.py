@@ -272,3 +272,4 @@ from .utils import Error
 from .utils import RemoveBarriers
 from .utils import ContainsInstruction
 from .utils import GatesInBasis
+from .utils import CombineAdjacentDelays
