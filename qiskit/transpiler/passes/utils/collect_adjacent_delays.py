@@ -74,11 +74,9 @@ class CombineAdjacentDelays(TransformationPass):
 
             # When merging delays, we might end up opening and immediately closing a delay at the same time it started.
             # So in this case, just drop it.
-            if start_time == end_time:
-                return
-
-            delay_op.duration = end_time - start_time
-            closed_delays.append((delay_op, start_time, end_time, replacing_delay_nodes))
+            if start_time != end_time:
+                delay_op.duration = end_time - start_time
+                closed_delays.append((delay_op, start_time, end_time, replacing_delay_nodes))
 
             # If we're closing a delay on 1 qubit out of many, re-open a N-1 qubit delay on the remaining qubits
             if closing_op_node is not None and len(replacing_delay_nodes) > 1:
