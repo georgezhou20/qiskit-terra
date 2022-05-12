@@ -1,6 +1,6 @@
 from qiskit.test import QiskitTestCase
 
-from qiskit.transpiler.passes.utils.collect_adjacent_delays import CombineAdjacentDelays
+from qiskit.transpiler.passes.utils.combine_adjacent_delays import CombineAdjacentDelays
 
 from qiskit.transpiler.timing_constraints import TimingConstraints
 from qiskit.transpiler.passes.scheduling import TimeUnitConversion, ConstrainedReschedule, PadDelay
