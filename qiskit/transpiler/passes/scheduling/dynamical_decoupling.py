@@ -95,7 +95,8 @@ class DynamicalDecoupling(TransformationPass):
         timeline_drawer(circ_dd)
     """
 
-    def __init__(self, durations, dd_sequence, qubits=None, spacing=None, skip_reset_qubits=True):
+    def __init__(self, durations, dd_sequence, qubits=None, spacing=None,
+                 skip_reset_qubits=True, pulse_alignment=1):
         """Dynamical decoupling initializer.
 
         Args:
@@ -112,6 +113,10 @@ class DynamicalDecoupling(TransformationPass):
             skip_reset_qubits (bool): if True, does not insert DD on idle
                 periods that immediately follow initialized/reset qubits (as
                 qubits in the ground state are less susceptile to decoherence).
+            pulse_alignment: The hardware constraints for gate timing allocation.
+                This is usually provided from ``backend.configuration().timing_constraints``.
+                If provided, the delay length, i.e. ``spacing``, is implicitly adjusted to
+                satisfy this constraint.
         """
         warnings.warn(
             "The DynamicalDecoupling class has been supersceded by the "
@@ -127,6 +132,7 @@ class DynamicalDecoupling(TransformationPass):
         self._qubits = qubits
         self._spacing = spacing
         self._skip_reset_qubits = skip_reset_qubits
+        self._alignment = pulse_alignment
 
     def run(self, dag):
         """Run the DynamicalDecoupling pass on dag.
@@ -187,8 +193,11 @@ class DynamicalDecoupling(TransformationPass):
                 dd_sequence_duration += gate.duration
             index_sequence_duration_map[physical_qubit] = dd_sequence_duration
 
+        def _constrained_length(values):
+            return self._alignment * np.floor(values / self._alignment)
+
         for nd in dag.topological_op_nodes():
-            if not isinstance(nd.op, Delay):
+            if not isinstance(nd.op, Delay) or nd.op.num_qubits != 1:
                 new_dag.apply_operation_back(nd.op, nd.qargs, nd.cargs)
                 continue
 
@@ -234,7 +243,7 @@ class DynamicalDecoupling(TransformationPass):
                     continue
 
             # insert the actual DD sequence
-            taus = [int(slack * a) for a in self._spacing]
+            taus = _constrained_length(slack * np.asarray(self._spacing))
             unused_slack = slack - sum(taus)  # unused, due to rounding to int multiples of dt
             middle_index = int((len(taus) - 1) / 2)  # arbitrary: redistribute to middle
             taus[middle_index] += unused_slack  # now we add up to original delay duration

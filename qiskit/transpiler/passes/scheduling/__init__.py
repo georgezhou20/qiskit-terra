@@ -15,6 +15,7 @@
 from .alap import ALAPSchedule
 from .asap import ASAPSchedule
 from .dynamical_decoupling import DynamicalDecoupling
+from .dynamical_decoupling_multi import DynamicalDecouplingMulti
 from .scheduling import ALAPScheduleAnalysis, ASAPScheduleAnalysis, SetIOLatency
 from .time_unit_conversion import TimeUnitConversion
 from .padding import PadDelay, PadDynamicalDecoupling
