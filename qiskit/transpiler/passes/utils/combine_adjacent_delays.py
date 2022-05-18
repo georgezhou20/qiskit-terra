@@ -34,8 +34,8 @@ class CombineAdjacentDelays(TransformationPass):
                 for op_node, start_time in self.property_set['node_start_time'].items()
                 if (
                     op_node.op.name == 'delay'
-                    and start_time != 0  # Skip delays at start of circuit
-                    and start_time + op_node.op.duration < dag.duration  # Skip delays at end of circuit
+                    # and start_time != 0  # Skip delays at start of circuit
+                    # and start_time + op_node.op.duration < dag.duration  # Skip delays at end of circuit
                     and op_node.op.duration > MIN_JOINABLE_DELAY_DURATION
                 )
                 for event_type in ('begin', 'end')

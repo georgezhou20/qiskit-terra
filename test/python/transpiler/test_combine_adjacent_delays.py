@@ -92,7 +92,22 @@ class TestCombineAdjacentDelays(QiskitTestCase):
             test_qc.cx(line[i], line[i+1])
         test_qc.cx(0,1)
 
-        g_test_qc = schedule_alap(test_qc, backend)
+        qvx = transpile(test_qc,
+                        coupling_map=CouplingMap(backend.configuration().coupling_map),
+                        basis_gates=['rz', 'sx', 'cx'],
+                        #basis_gates=['unitary', 'swap'],
+                        seed_transpiler=4,
+                        optimization_level=0)
+
+        #qvx._data = qvx._data[:3]
+
+        qvx2 = transpile(qvx,
+                         initial_layout=line[:N],
+                         basis_gates=['rz', 'sx', 'cx'],
+                         instruction_durations = InstructionDurations.from_backend(backend),
+                         scheduling_method='alap')
+
+        g_test_qc = schedule_alap(qvx2, backend)
 
     def test_qv16(self):
         # import logging
