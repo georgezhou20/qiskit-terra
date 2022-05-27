@@ -16,6 +16,8 @@ import itertools
 import warnings
 
 import numpy as np
+import retworkx as rx
+
 from qiskit.circuit.delay import Delay
 from qiskit.circuit.reset import Reset
 from qiskit.circuit.library.standard_gates import IGate, XGate, RZGate
@@ -132,15 +134,19 @@ class DynamicalDecouplingMulti(TransformationPass):
                 continue
 
             # insert the actual DD sequence
+            sub_coupling_map = coupling_map.subgraph(physical_qubits)
+            coloring = rx.graph_greedy_color(sub_coupling_map.graph.to_undirected())
+
             for dag_qubit, physical_qubit in zip(dag_qubits, physical_qubits):
                 i = physical_qubits.index(physical_qubit)
                 slack = slacks[i]
-                if physical_qubit % 2 != 0:  # TODO: fix
+                if coloring[i] == 0:
                     taus = _constrained_length(slack * np.asarray(self._spacing_odd))
                     unused_slack = slack - sum(taus)  # unused, due to rounding to int multiples of dt
                     middle_index = int((len(taus) - 1) / 2)  # arbitrary: redistribute to middle
                     taus[middle_index] += unused_slack  # now we add up to original delay duration
                 else:
+                    # N.B. If 2-coloring doesn't exist or wasn't found, allow for conflicts.
                     taus = _constrained_length(slack * np.asarray(self._spacing_even))
                     unused_slack = slack - sum(taus)  # unused, due to rounding to int multiples of dt
                     middle_index = int((len(taus) - 1) / 2)  # arbitrary: redistribute to middle
