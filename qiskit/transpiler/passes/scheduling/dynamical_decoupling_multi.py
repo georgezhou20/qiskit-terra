@@ -134,7 +134,7 @@ class DynamicalDecouplingMulti(TransformationPass):
                 continue
 
             # insert the actual DD sequence
-            sub_coupling_map = coupling_map.subgraph(physical_qubits)
+            sub_coupling_map = self._coupling_map.subgraph(physical_qubits)
             coloring = rx.graph_greedy_color(sub_coupling_map.graph.to_undirected())
 
             for dag_qubit, physical_qubit in zip(dag_qubits, physical_qubits):
