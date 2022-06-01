@@ -13,7 +13,7 @@ from qiskit.transpiler import TransformationPass, CouplingMap
 
 logger = logging.getLogger(__name__)
 
-MIN_JOINABLE_DELAY_DURATION = 1000
+MIN_JOINABLE_DELAY_DURATION = 500
 
 class CombineAdjacentDelays(TransformationPass):
     def __init__(self, cmap):

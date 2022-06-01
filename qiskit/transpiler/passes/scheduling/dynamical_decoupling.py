@@ -96,7 +96,7 @@ class DynamicalDecoupling(TransformationPass):
     """
 
     def __init__(self, durations, dd_sequence, qubits=None, spacing=None,
-                 skip_reset_qubits=True, pulse_alignment=1):
+                 skip_reset_qubits=True, pulse_alignment=1, skip_threshold=1):
         """Dynamical decoupling initializer.
 
         Args:
@@ -117,6 +117,9 @@ class DynamicalDecoupling(TransformationPass):
                 This is usually provided from ``backend.configuration().timing_constraints``.
                 If provided, the delay length, i.e. ``spacing``, is implicitly adjusted to
                 satisfy this constraint.
+            skip_threshold (float): a number in range [0, 1]. If the DD sequence
+                amounts to more than this fraction of the idle window, we skip.
+                Default: 1 (i.e. always insert, even if filling up the window).
         """
         warnings.warn(
             "The DynamicalDecoupling class has been supersceded by the "
@@ -133,6 +136,7 @@ class DynamicalDecoupling(TransformationPass):
         self._spacing = spacing
         self._skip_reset_qubits = skip_reset_qubits
         self._alignment = pulse_alignment
+        self._skip_threshold = skip_threshold
 
     def run(self, dag):
         """Run the DynamicalDecoupling pass on dag.
@@ -216,7 +220,8 @@ class DynamicalDecoupling(TransformationPass):
 
             dd_sequence_duration = index_sequence_duration_map[physical_qubit]
             slack = nd.op.duration - dd_sequence_duration
-            if slack <= 0:  # dd doesn't fit
+            slack_fraction = slack / nd.op.duration
+            if 1-slack_fraction >= self._skip_threshold:  # dd doesn't fit
                 new_dag.apply_operation_back(nd.op, nd.qargs, nd.cargs)
                 continue
 
