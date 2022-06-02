@@ -62,6 +62,8 @@ class DynamicalDecouplingMulti(TransformationPass):
         self._dd_sequence = [XGate(), RZGate(np.pi), XGate(), RZGate(-np.pi)]
         self._spacing_odd = [1/2, 1/2, 0, 0, 0]
         self._spacing_even = [1/4, 1/2, 0, 0, 1/4]
+        self._addition_odd = [1, 1, 0, 0, 0]
+        self._addition_even = [0, 1, 0, 0, 1]
         self._skip_threshold = skip_threshold
 
     def run(self, dag):
@@ -140,14 +142,18 @@ class DynamicalDecouplingMulti(TransformationPass):
             for dag_qubit, physical_qubit in zip(dag_qubits, physical_qubits):
                 i = physical_qubits.index(physical_qubit)
                 slack = slacks[i]
+                xx = dd_sequence_durations[i] # FIXME: assumes same X duration on odd & even
+                slack_prime = slack - xx
                 if coloring[i] == 0:
-                    taus = _constrained_length(slack * np.asarray(self._spacing_odd))
+                    taus = _constrained_length(slack_prime * np.asarray(self._spacing_odd))
+                    taus += _constrained_length(.5 * xx * np.asarray(self._addition_odd))
                     unused_slack = slack - sum(taus)  # unused, due to rounding to int multiples of dt
                     middle_index = int((len(taus) - 1) / 2)  # arbitrary: redistribute to middle
                     taus[middle_index] += unused_slack  # now we add up to original delay duration
                 else:
                     # N.B. If 2-coloring doesn't exist or wasn't found, allow for conflicts.
-                    taus = _constrained_length(slack * np.asarray(self._spacing_even))
+                    taus = _constrained_length(slack_prime * np.asarray(self._spacing_even))
+                    taus += _constrained_length(.5 * xx * np.asarray(self._addition_even))
                     unused_slack = slack - sum(taus)  # unused, due to rounding to int multiples of dt
                     middle_index = int((len(taus) - 1) / 2)  # arbitrary: redistribute to middle
                     taus[middle_index] += unused_slack  # now we add up to original delay duration
