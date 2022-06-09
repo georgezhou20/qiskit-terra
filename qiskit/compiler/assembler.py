@@ -75,6 +75,7 @@ def assemble(
     parameter_binds: Optional[List[Dict[Parameter, float]]] = None,
     parametric_pulses: Optional[List[str]] = None,
     init_qubits: bool = True,
+    no_copy_assemble: bool = True,
     **run_config: Dict,
 ) -> Qobj:
     """Assemble a list of circuits or pulse schedules into a ``Qobj``.
@@ -202,7 +203,7 @@ def assemble(
 
         # If circuits are parameterized, bind parameters and remove from run_config
         bound_experiments, run_config = _expand_parameters(
-            circuits=experiments, run_config=run_config
+            circuits=experiments, run_config=run_config, no_copy_assemble=no_copy_assemble,
         )
         end_time = time()
         _log_assembly_time(start_time, end_time)
@@ -211,6 +212,7 @@ def assemble(
             qobj_id=qobj_id,
             qobj_header=qobj_header,
             run_config=run_config,
+            no_copy_assemble=no_copy_assemble
         )
 
     elif all(isinstance(exp, (ScheduleBlock, Schedule, Instruction)) for exp in experiments):
@@ -550,7 +552,7 @@ def _parse_rep_delay(
     return rep_delay
 
 
-def _expand_parameters(circuits, run_config):
+def _expand_parameters(circuits, run_config, no_copy_assemble):
     """Verifies that there is a single common set of parameters shared between
     all circuits and all parameter binds in the run_config. Returns an expanded
     list of circuits (if parameterized) with all parameters bound, and a copy of
@@ -600,12 +602,17 @@ def _expand_parameters(circuits, run_config):
                 ).format(all_bind_parameters, all_circuit_parameters)
             )
 
-        circuits = [
-            circuit.bind_parameters(binds) for circuit in circuits for binds in parameter_binds
-        ]
+        if not no_copy_assemble:
+            circuits = [
+                circuit.bind_parameters(binds) for circuit in circuits for binds in parameter_binds
+            ]
 
-        # All parameters have been expanded and bound, so remove from run_config
-        run_config = copy.deepcopy(run_config)
-        run_config.parameter_binds = []
+            # All parameters have been expanded and bound, so remove from run_config
+            run_config = copy.deepcopy(run_config)
+            run_config.parameter_binds = []
+        else:
+            # If we're pushing the parameter binding further into assemble (at qobj creation time), 
+            # still validate (above), but keep parameters in run_config. To be removed later.
+            pass
 
     return circuits, run_config

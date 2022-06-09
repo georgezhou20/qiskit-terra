@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 
 from qiskit.assembler.run_config import RunConfig
 from qiskit.assembler.assemble_schedules import _assemble_instructions as _assemble_schedule
-from qiskit.circuit import QuantumCircuit
+from qiskit.circuit import QuantumCircuit, ParameterExpression, Parameter
 from qiskit.circuit.classicalregister import Clbit
 from qiskit.exceptions import QiskitError
 from qiskit.qobj import (
@@ -41,7 +41,7 @@ PulseLibrary = Dict[str, List[complex]]
 
 
 def _assemble_circuit(
-    circuit: QuantumCircuit, run_config: RunConfig
+    circuit_tup, run_config: RunConfig, no_copy_assemble: bool
 ) -> Tuple[QasmQobjExperiment, Optional[PulseLibrary]]:
     """Assemble one circuit.
 
@@ -55,6 +55,8 @@ def _assemble_circuit(
     Raises:
         QiskitError: when the circuit has unit other than 'dt'.
     """
+    circuit, parameter_binds = circuit_tup
+
     if circuit.unit != "dt":
         raise QiskitError(
             f"Unable to assemble circuit with unit '{circuit.unit}', which must be 'dt'."
@@ -117,7 +119,28 @@ def _assemble_circuit(
 
     instructions = []
     for op_context in circuit.data:
-        instruction = op_context[0].assemble()
+        if no_copy_assemble:
+            # If we're doing a no circuit.copy assemble, bind the params array and smuggle it
+            # into assemble. Pushing it into Instruction.assmeble() would be cleaner, but would
+            # require updating subclasses.
+            old_params = op_context[0].params
+
+            new_params = [
+                parameter_binds[param] if isinstance(param, Parameter)
+                else param.bind({parameter: parameter_binds[parameter]
+                                 for parameter in parameter_binds
+                                 if parameter in param.parameters})
+                          if isinstance(param, ParameterExpression)
+                else param
+                for param in old_params]
+
+            op_context[0]._params = new_params
+            instruction = op_context[0].assemble()
+            op_context[0]._params = old_params
+            #if any(param in circuit.parameters for param in op_context[0].params):
+            #if any(isinstance(param, ParameterExpression)  for param in op_context[0].params):
+        else:
+            instruction = op_context[0].assemble()
 
         # Add register attributes to the instruction
         qargs = op_context[1]
@@ -299,7 +322,7 @@ def _configure_experiment_los(
 
 
 def assemble_circuits(
-    circuits: List[QuantumCircuit], run_config: RunConfig, qobj_id: int, qobj_header: QobjHeader
+        circuits: List[QuantumCircuit], run_config: RunConfig, qobj_id: int, qobj_header: QobjHeader, no_copy_assemble: bool
 ) -> QasmQobj:
     """Assembles a list of circuits into a qobj that can be run on the backend.
 
@@ -313,7 +336,23 @@ def assemble_circuits(
         The qobj to be run on the backends
     """
     # assemble the circuit experiments
-    experiments_and_pulse_libs = parallel_map(_assemble_circuit, circuits, [run_config])
+    parameter_binds = None
+    if no_copy_assemble:
+        parameter_binds = run_config.parameter_binds
+        run_config = RunConfig.from_dict(run_config.to_dict())
+        run_config.parameter_binds = []
+
+        experiments_and_pulse_libs = parallel_map(_assemble_circuit,
+                                                  [(circ, parameter_binds[param_idx])
+                                                   for circ in circuits
+                                                   for param_idx in range(len(parameter_binds))],
+                                                  [run_config, no_copy_assemble])
+    else:
+        experiments_and_pulse_libs = parallel_map(_assemble_circuit,
+                                                  [(circ, None)
+                                                   for circ in circuits],
+                                                  [run_config, no_copy_assemble])
+
     experiments = []
     pulse_library = {}
     for exp, lib in experiments_and_pulse_libs:
