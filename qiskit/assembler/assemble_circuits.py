@@ -337,7 +337,7 @@ def assemble_circuits(
     """
     # assemble the circuit experiments
     parameter_binds = None
-    if no_copy_assemble:
+    if no_copy_assemble and run_config.parameter_binds:
         parameter_binds = run_config.parameter_binds
         run_config = RunConfig.from_dict(run_config.to_dict())
         run_config.parameter_binds = []
